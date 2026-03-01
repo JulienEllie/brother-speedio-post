@@ -138,6 +138,14 @@ properties = {
     value: "Renishaw",
     scope: "post"
   },
+  useSafeProbing: {
+    title      : "Enable safe probing",
+    description: "Uses protected positioning (G31 P2 skip-on-trigger via O8810) for all rapid moves when the probe is active, not just during measurement cycles. If the probe contacts anything during approach moves, the machine stops with a PATH OBSTRUCTED alarm instead of crashing the probe. Approach moves use feedrate (F5000) instead of true rapid (G0), so disable this if you trust your WCS and want maximum speed in production.",
+    group      : "probing",
+    type       : "boolean",
+    value      : true,
+    scope      : "post"
+  },
   washdownCoolant: {
     title      : "Washdown coolant",
     description: "Specifies whether washdown coolant should be used and where it is output.",
@@ -166,6 +174,14 @@ properties = {
     group      : "preferences",
     type       : "boolean",
     value      : true,
+    scope      : "post"
+  },
+  useStuckChipsDetection: {
+    title      : "Stuck chips detection",
+    description: "Enables stuck chips detection (M318) during tool changes. The D00 monitors Z-axis load to detect foreign objects between the spindle face and tool holder. Only enable once your magazine tool lineup is stable — detection compares against learned baselines, so frequent tool swaps cause false alarms.",
+    group      : "preferences",
+    type       : "boolean",
+    value      : false,
     scope      : "post"
   },
   useClampCodes: {
@@ -488,7 +504,10 @@ function onOpen() {
     settings.smoothing.roughing = 5;
     settings.smoothing.semi = 3;
     settings.smoothing.semifinishing = 1;
-    settings.smoothing.finishing = 6;
+    settings.smoothing.finishing = 2;
+    break;
+  case "M298":
+    settings.smoothing.finishing = 6; // M298 L6 = Finishing S
     break;
   }
 
@@ -512,6 +531,9 @@ function onOpen() {
   writeBlock(gFeedModeModal.format(94), toolLengthCompOutput.format(49));
   writeBlock(mFormat.format(298), "L0"); // cancel smoothing
   writeBlock(gFormat.format(69));        // cancel tilted workplane
+  if (getProperty("useStuckChipsDetection")) {
+    writeBlock(mFormat.format(318)); // enable stuck chips detection
+  }
 
   writeComment("File output in " + (unit == 1 ? "MM" : "inches") + ". Please ensure the unit is set correctly on the control");
   validateCommonParameters();
@@ -3144,7 +3166,21 @@ function onRapid(_x, _y, _z) {
       error(localize("Radius compensation mode cannot be changed at rapid traversal."));
       return;
     }
-    writeBlock(gMotionModal.format(0), x, y, z);
+    // Use protected positioning (G31 P2 skip-on-trigger) for all rapid moves when probe is active.
+    // Prevents probe damage from premature contact during approach moves if WCS is wrong.
+    if (tool.type == TOOL_PROBE && getProperty("useSafeProbing") && getProperty("probingType") == "Renishaw") {
+      if (z && _z >= getCurrentPosition().z) {
+        writeBlock(gFormat.format(65), "P" + 8810, z, getFeed(highFeedrate));
+      }
+      if (x || y) {
+        writeBlock(gFormat.format(65), "P" + 8810, x, y, getFeed(highFeedrate));
+      }
+      if (z && _z < getCurrentPosition().z) {
+        writeBlock(gFormat.format(65), "P" + 8810, z, getFeed(highFeedrate));
+      }
+    } else {
+      writeBlock(gMotionModal.format(0), x, y, z);
+    }
     forceFeed();
   }
 }

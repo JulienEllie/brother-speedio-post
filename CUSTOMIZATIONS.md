@@ -25,10 +25,9 @@ Update this revision number after verifying customizations against a new version
 
 ## 3. Finishing smoothing level → L6
 
-- **Where:** `settings.smoothing.finishing` in the `smoothingMode` switch inside `onOpen()` (`grep 'settings.smoothing.finishing'`)
-- **From:** `settings.smoothing.finishing = 2`
-- **To:** `settings.smoothing.finishing = 6`
-- **Why:** M298 L6 ("Finishing S") is the optimal setting for 3D surface finishing on the D00 control. The default L2 is a legacy mapping for mode A/B and doesn't apply to M298.
+- **Where:** `smoothingMode` switch inside `onOpen()` (`grep 'settings.smoothing.finishing'`)
+- **Add:** a `case "M298":` block with `settings.smoothing.finishing = 6;`
+- **Why:** The framework default for finishing is L5. M298 L6 ("Finishing S") is the optimal setting for 3D surface finishing on the D00 control. The A/B case block already overrides these levels but doesn't cover M298 — a separate case is needed.
 
 ## 4. Enable G68.2 (tilted workplane)
 
@@ -67,6 +66,20 @@ Update this revision number after verifying customizations against a new version
 - **From:** `value: false`
 - **To:** `value: true`
 - **Why:** Outputs an L value in G77 tapping cycles for faster withdrawal (up to 6000 RPM). Takes advantage of the 16K spindle's capability.
+
+## 9. Stuck chips detection (optional, default OFF)
+
+- **Where:** `useStuckChipsDetection` property definition (`grep 'useStuckChipsDetection'`)
+- **Default:** `value: false`
+- **To enable:** `value: true`
+- **Why:** Outputs M318 at program start to enable Z-axis load monitoring during tool changes. The D00 compares each tool change load signature against a learned baseline to detect chips or debris stuck between the spindle face and tool holder. Only useful once your magazine is stable — the detection compares against previously recorded load profiles, so if you're frequently swapping tools in/out of the magazine, the baselines won't be meaningful and you'll get false alarms. Enable this for production runs where the tool lineup is settled.
+
+## 10. Safe probing — protected approach moves
+
+- **Where:** `useSafeProbing` property definition (`grep 'useSafeProbing'`) and `onRapid()` function (`grep 'function onRapid'`)
+- **Default:** `value: true`
+- **What:** Adds a `useSafeProbing` property and modifies `onRapid()` to use G65 P8810 (protected positioning with G31 P2 skip-on-trigger) for all rapid moves when the probe is active. Splits combined XYZ rapids into safe Z-up → XY → Z-down ordering.
+- **Why:** The stock post only uses protected positioning during the probing cycle itself (`protectedProbeMove`). The initial approach rapids from the tool change position to the probing area use regular G0 — if WCS is wrong, the probe crashes into the part with no trigger detection. With this enabled, every rapid move with the probe in the spindle goes through O8810, which stops with a PATH OBSTRUCTED alarm on premature contact. Tradeoff: approach moves use F5000 instead of true G0 rapid, so disable for production when you trust your WCS and want maximum speed.
 
 ---
 
