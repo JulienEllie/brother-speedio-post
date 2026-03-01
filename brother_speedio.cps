@@ -149,7 +149,7 @@ properties = {
       {title:"End of operation", id:"operationEnd"},
       {title:"Program end", id:"programEnd"}
     ],
-    value: "off",
+    value: "operationEnd",
     scope: "post"
   },
   usePitchForTapping: {
@@ -165,7 +165,7 @@ properties = {
     description: "If enabled, an L value containing double the spindle speed (up to 6000) will be output in the G77 tapping cycle.",
     group      : "preferences",
     type       : "boolean",
-    value      : false,
+    value      : true,
     scope      : "post"
   },
   useClampCodes: {
@@ -173,7 +173,7 @@ properties = {
     description: "Specifies whether clamp codes for rotary axes should be output. For simultaneous toolpaths rotary axes will always get unclamped.",
     group      : "multiAxis",
     type       : "boolean",
-    value      : false,
+    value      : true,
     scope      : "post"
   },
   smoothingMode: {
@@ -186,7 +186,7 @@ properties = {
       {title:"B", id:"B"},
       {title:"M298", id:"M298"}
     ],
-    value: "A"
+    value: "M298"
   },
   useSmoothing: {
     title      : "High accuracy level",
@@ -203,7 +203,7 @@ properties = {
       {title:"Finishing", id:"4"}, // 1
       {title:"Finishing high", id:"5"} // 2
     ],
-    value: "-1"
+    value: "9999"
   },
   useMachiningLoadMonitor: {
     title      : "Machining Load Monitor",
@@ -244,7 +244,7 @@ properties = {
     description: "Enable to use G68.2 for 3+2 operations.",
     group      : "multiAxis",
     type       : "boolean",
-    value      : false,
+    value      : true,
     scope      : "machine"
   },
   singleResultsFile: {
@@ -488,7 +488,7 @@ function onOpen() {
     settings.smoothing.roughing = 5;
     settings.smoothing.semi = 3;
     settings.smoothing.semifinishing = 1;
-    settings.smoothing.finishing = 2;
+    settings.smoothing.finishing = 6;
     break;
   }
 
@@ -510,6 +510,8 @@ function onOpen() {
   // absolute coordinates and feed per min
   writeBlock(gMotionModal.format(0), gAbsIncModal.format(90), gFormat.format(40), gFormat.format(80));
   writeBlock(gFeedModeModal.format(94), toolLengthCompOutput.format(49));
+  writeBlock(mFormat.format(298), "L0"); // cancel smoothing
+  writeBlock(gFormat.format(69));        // cancel tilted workplane
 
   writeComment("File output in " + (unit == 1 ? "MM" : "inches") + ". Please ensure the unit is set correctly on the control");
   validateCommonParameters();
