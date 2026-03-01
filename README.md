@@ -34,6 +34,10 @@ bash update.sh
 
 This downloads the latest post from the [Autodesk post library](https://cam.autodesk.com/hsmposts), extracts the JavaScript source, and saves it as `brother_speedio.cps`. After updating, review [CUSTOMIZATIONS.md](CUSTOMIZATIONS.md) and re-apply the changes.
 
+## Disclaimer
+
+This post processor is provided as-is, with no promises or guarantees of accuracy, safety, or fitness for any purpose. Use it at your own risk. You are responsible for verifying all G-code output before running it on your machine. I am not responsible for any damage to your machine, tooling, workpiece, or anything else — including but not limited to setting your machine on fire.
+
 ## Links
 
 - [Autodesk post processor library](https://cam.autodesk.com/hsmposts) — upstream source
