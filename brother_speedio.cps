@@ -507,6 +507,8 @@ function onOpen() {
     settings.smoothing.finishing = 2;
     break;
   case "M298":
+    // Only finishing is overridden — the framework defaults for roughing/semi/semifinishing
+    // map correctly to the M298 Ln levels used by the D00 control.
     settings.smoothing.finishing = 6; // M298 L6 = Finishing S
     break;
   }
