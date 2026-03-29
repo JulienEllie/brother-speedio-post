@@ -10,14 +10,14 @@
   FORKID {C09133CD-6F13-4DFC-9EB8-41260FBB5B08}
 */
 
-description = "Julien Ellie Edit of Brother Speedio";
-vendor = "Julien Ellie";
-vendorUrl = "http://www.brother.com";
+description = "Microfactory.us edit of Brother Speedio";
+vendor = "Microfactory.us";
+vendorUrl = "http://www.microfactory.us";
 legal = "Copyright (C) 2012-2026 by Autodesk, Inc.";
 certificationLevel = 2;
 minimumRevision = 45917;
 
-longDescription = "Generic milling post for use with all common Brother Speedio mills like S, W, R, U, F and H series machines.";
+longDescription = "Generic milling post for use with recent series machines.";
 
 extension = "NC";
 programNameIsInteger = false;
