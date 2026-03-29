@@ -1,6 +1,8 @@
 /**
-  Copyright (C) 2012-2026 by Autodesk, Inc.
+  Original copyright (C) 2012-2026 by Autodesk, Inc.
   All rights reserved.
+
+  Update by Microfactory.us
 
   Brother Speedio post processor configuration.
 
