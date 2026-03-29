@@ -26,6 +26,37 @@ These properties can be toggled in Fusion's post processor dialog:
 | Enable safe probing | ON | Uses protected positioning (O8810) for all probe approach moves instead of G0 rapid. Prevents probe damage if WCS is wrong. Disable for maximum speed in production when you trust your WCS. |
 | Stuck chips detection | OFF | Outputs M318 at program start to enable Z-axis load monitoring during tool changes. Only useful once your magazine tool lineup is stable — frequent tool swaps cause false alarms against the learned baselines. |
 
+## Smoothing level mapping
+
+The post is set to **Automatic** smoothing, which selects the M298/Mode B level based on the operation's stock-to-leave in Fusion. Multi-axis TCP sections automatically use Mode B (M280-M287) instead of M298 since they are mutually exclusive on the D00 control.
+
+### Automatic mode (stock-to-leave thresholds)
+
+| Fusion stock-to-leave | Category | 3-axis (M298) | 5-axis TCP (Mode B) |
+|---|---|---|---|
+| >= 0.5mm (or face op) | Roughing | M298 L2 | M285 |
+| 0.1 – 0.5mm | Semi-roughing | M298 L3 | M283 |
+| 0.05 – 0.1mm | Semi-finishing | M298 L4 | M281 |
+| < 0.05mm (or 0) | Finishing | M298 L6 | M282 |
+
+Probing and drilling cycles always skip smoothing regardless of the setting.
+
+### Manual override
+
+If `useSmoothing` is changed from Automatic to a fixed level in the post properties:
+
+| Property value | M298 level | Mode B code |
+|---|---|---|
+| Off | _(no output)_ | _(no output)_ |
+| Standard | M298 L0 | M280 |
+| Roughing | M298 L1 | M285 |
+| Medium rough | M298 L2 | M283 |
+| Medium rough high | M298 L3 | M284 |
+| Finishing | M298 L4 | M281 |
+| Finishing high | M298 L5 | M282 |
+
+Note: manual override uses raw level numbers (0-5), which differ from the automatic mode levels (2, 3, 4, 6). Automatic is recommended — it picks the right level per operation based on your CAM setup.
+
 ## Updating to a new upstream version
 
 ```bash
