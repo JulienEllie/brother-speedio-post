@@ -2,7 +2,13 @@
   Original copyright (C) 2012-2026 by Autodesk, Inc.
   All rights reserved.
 
-  Update by Microfactory.us
+  Update by Microfactory.us. This post processor is provided as-is, 
+  with no promises or guarantees of accuracy, safety, 
+  or fitness for any purpose. Use it at your own risk. You are 
+  responsible for verifying all G-code output before running 
+  it on your machine. I am not responsible for any damage to your machine, 
+  tooling, workpiece, or anything else — 
+  including but not limited to setting your machine on fire.
 
   Brother Speedio post processor configuration.
 
