@@ -10,8 +10,8 @@
   FORKID {C09133CD-6F13-4DFC-9EB8-41260FBB5B08}
 */
 
-description = "Brother Speedio";
-vendor = "Brother";
+description = "Julien Ellie Edit of Brother Speedio";
+vendor = "Julien Ellie";
 vendorUrl = "http://www.brother.com";
 legal = "Copyright (C) 2012-2026 by Autodesk, Inc.";
 certificationLevel = 2;
@@ -510,6 +510,12 @@ function onOpen() {
     // Only finishing is overridden — the framework defaults for roughing/semi/semifinishing
     // map correctly to the M298 Ln levels used by the D00 control.
     settings.smoothing.finishing = 6; // M298 L6 = Finishing S
+    // M298 is incompatible with TCP (G43.4/G43.5). For multi-axis TCP operations,
+    // Mode B (M280-M287) is used instead — it is valid regardless of TCP state.
+    settings.smoothing.modeBRoughing = 5;
+    settings.smoothing.modeBSemi = 3;
+    settings.smoothing.modeBSemifinishing = 1;
+    settings.smoothing.modeBFinishing = 2;
     break;
   }
 
@@ -531,7 +537,7 @@ function onOpen() {
   // absolute coordinates and feed per min
   writeBlock(gMotionModal.format(0), gAbsIncModal.format(90), gFormat.format(40), gFormat.format(80));
   writeBlock(gFeedModeModal.format(94), toolLengthCompOutput.format(49));
-  writeBlock(mFormat.format(298), "L0"); // cancel smoothing
+  writeBlock(mFormat.format(299)); // cancel M298 machining mode (required before TCP)
   writeBlock(gFormat.format(69));        // cancel tilted workplane
   if (getProperty("useStuckChipsDetection")) {
     writeBlock(mFormat.format(318)); // enable stuck chips detection
@@ -560,8 +566,37 @@ function setSmoothing(mode) {
   case "B":
     writeBlock(mFormat.format(mode ? 280 + mappedLevel : 289));
     break;
-  default:
-    writeBlock(mFormat.format(298), mode ? "L" + smoothing.level : "L0");
+  default: // M298
+    if (!mode) {
+      // Cancel: use M299 if M298 was active, M289 if Mode B was active
+      if (smoothing.usedModeB) {
+        writeBlock(mFormat.format(289));
+      } else {
+        writeBlock(mFormat.format(299));
+      }
+      smoothing.usedModeB = false;
+    } else {
+      var useTCP = currentSection.isMultiAxis() || (currentSection.isOptimizedForMachine() && tcp.isSupportedByOperation);
+      if (useTCP) {
+        // M298 is incompatible with G43.4/G43.5 TCP — use Mode B (M280-M287) instead.
+        // Map M298 level to the equivalent Mode B level by smoothing category.
+        var modeBLevel = smoothing.level;
+        if (smoothing.level == settings.smoothing.roughing) {
+          modeBLevel = settings.smoothing.modeBRoughing;
+        } else if (smoothing.level == settings.smoothing.semi) {
+          modeBLevel = settings.smoothing.modeBSemi;
+        } else if (smoothing.level == settings.smoothing.semifinishing) {
+          modeBLevel = settings.smoothing.modeBSemifinishing;
+        } else if (smoothing.level == settings.smoothing.finishing) {
+          modeBLevel = settings.smoothing.modeBFinishing;
+        }
+        writeBlock(mFormat.format(280 + modeBLevel));
+        smoothing.usedModeB = true;
+      } else {
+        writeBlock(mFormat.format(298), "L" + smoothing.level);
+        smoothing.usedModeB = false;
+      }
+    }
     break;
   }
   smoothing.isActive = mode;
@@ -620,6 +655,8 @@ function onSection() {
   }
   writeWCS(currentSection, wcsIsRequired);
 
+  setSmoothing(smoothing.isAllowed); // must be set before G100/G43.4 activates TCP
+
   if (insertToolCall) {
     if (tool.manualToolChange) {
       error(localize("Manual tool change is not supported by this postprocessor."));
@@ -659,8 +696,6 @@ function onSection() {
       }
     }
   }
-
-  setSmoothing(smoothing.isAllowed);
 
   if (getProperty("washdownCoolant") == "always") {
     writeBlock(washdownModal.format(tool.type == TOOL_PROBE ? washdownCoolant.off : washdownCoolant.on));
@@ -1866,12 +1901,13 @@ function onClose() {
     writeBlock(washdownModal.format(washdownCoolant.off));
   }
 
+  setSmoothing(false); // cancel smoothing before G100 which activates TCP
+
   var firstToolNumber = getSection(0).getTool().number;
   writeBlock(gFormat.format(100), "T" + toolFormat.format(firstToolNumber));
   if (getSetting("retract.homeXY.onProgramEnd", false)) {
     writeRetract(settings.retract.homeXY.onProgramEnd);
   }
-  setSmoothing(false);
   setWorkPlane(new Vector(0, 0, 0)); // reset working plane
   if (typeof inspectionProcessSectionEnd == "function") {
     inspectionProcessSectionEnd();
@@ -3001,7 +3037,8 @@ var smoothing = {
   isDifferent: false, // tells if smoothing levels/tolerances/both are different between operations
   level      : -1, // the active level of smoothing
   tolerance  : -1, // the current operation tolerance
-  force      : false // smoothing needs to be forced out in this operation
+  force      : false, // smoothing needs to be forced out in this operation
+  usedModeB  : false // true when Mode B was used instead of M298 (for TCP sections)
 };
 
 function initializeSmoothing() {
@@ -3074,6 +3111,17 @@ function initializeSmoothing() {
   default:
     error(localize("Unsupported smoothing criteria."));
     return;
+  }
+
+  // M298 mode: force smoothing re-output when switching between TCP and non-TCP sections,
+  // because the actual codes change (M298 vs M280-M287) even if the level is the same.
+  if (getProperty("smoothingMode") == "M298" && !isFirstSection() && smoothing.isActive) {
+    var prevMultiAxis = getPreviousSection().isMultiAxis();
+    var curMultiAxis = currentSection.isMultiAxis();
+    if (prevMultiAxis != curMultiAxis) {
+      smoothing.isDifferent = true;
+      smoothing.force = true;
+    }
   }
 
   // tool length compensation needs to be canceled when smoothing state/level changes

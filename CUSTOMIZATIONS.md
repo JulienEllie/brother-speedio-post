@@ -23,11 +23,18 @@ Update this revision number after verifying customizations against a new version
 - **To:** `value: "9999"` (Automatic)
 - **Why:** High accuracy mode should always be active for milling on the D00 control.
 
-## 3. Finishing smoothing level → L6
+## 3. Finishing smoothing level → L6 + Mode B fallback for TCP
 
 - **Where:** `smoothingMode` switch inside `onOpen()` (`grep 'settings.smoothing.finishing'`)
-- **Add:** a `case "M298":` block with `settings.smoothing.finishing = 6;`
-- **Why:** The framework default for finishing is L5. M298 L6 ("Finishing S") is the optimal setting for 3D surface finishing on the D00 control. The A/B case block already overrides these levels but doesn't cover M298 — a separate case is needed.
+- **Add:** a `case "M298":` block with:
+  ```javascript
+  settings.smoothing.finishing = 6; // M298 L6 = Finishing S
+  settings.smoothing.modeBRoughing = 5;
+  settings.smoothing.modeBSemi = 3;
+  settings.smoothing.modeBSemifinishing = 1;
+  settings.smoothing.modeBFinishing = 2;
+  ```
+- **Why:** The framework default for finishing is L5. M298 L6 ("Finishing S") is the optimal setting for 3D surface finishing on the D00 control. The Mode B levels are fallback mappings used by `setSmoothing()` during multi-axis TCP operations (see #11).
 
 ## 4. Enable G68.2 (tilted workplane)
 
@@ -41,10 +48,10 @@ Update this revision number after verifying customizations against a new version
 - **Where:** `onOpen()` function, after the `writeBlock(gFeedModeModal.format(94) ...` line (`grep 'gFeedModeModal.format(94)'`)
 - **Add these lines after the safe start block:**
   ```javascript
-  writeBlock(mFormat.format(298), "L0"); // cancel smoothing
-  writeBlock(gFormat.format(69));        // cancel tilted workplane
+  writeBlock(mFormat.format(299)); // cancel M298 machining mode (required before TCP)
+  writeBlock(gFormat.format(69));  // cancel tilted workplane
   ```
-- **Why:** Cancels residual M298 smoothing and G68.2 rotation that may persist from previously aborted programs. Ensures a clean machine state at program start.
+- **Why:** Cancels residual M298 machining mode and G68.2 rotation that may persist from previously aborted programs. Uses M299 (not M298 L0) because M299 fully exits M298 mode, which is required before G43.4/G43.5 TCP can activate. M298 L0 only sets the level to zero but leaves M298 mode selected, which blocks TCP.
 
 ## 6. Washdown coolant → end of operation
 
@@ -80,6 +87,34 @@ Update this revision number after verifying customizations against a new version
 - **Default:** `value: true`
 - **What:** Adds a `useSafeProbing` property and modifies `onRapid()` to use G65 P8810 (protected positioning with G31 P2 skip-on-trigger) for all rapid moves when the probe is active. Splits combined XYZ rapids into safe Z-up → XY → Z-down ordering.
 - **Why:** The stock post only uses protected positioning during the probing cycle itself (`protectedProbeMove`). The initial approach rapids from the tool change position to the probing area use regular G0 — if WCS is wrong, the probe crashes into the part with no trigger detection. With this enabled, every rapid move with the probe in the spindle goes through O8810, which stops with a PATH OBSTRUCTED alarm on premature contact. Tradeoff: approach moves use F5000 instead of true G0 rapid, so disable for production when you trust your WCS and want maximum speed.
+
+## 11. M298 / TCP incompatibility — automatic Mode B fallback for multi-axis
+
+- **Where:** `setSmoothing()` function, `smoothing` state object, and `initializeSmoothing()` (`grep 'usedModeB'`)
+- **What:** On the D00 control, M298 and G43.4/G43.5 TCP are mutually exclusive. Issuing M298 while TCP is active triggers `<<TCP under control>>`. Issuing G43.4 while M298 is selected triggers `<<TCP control command not possible>>`. Per the programming manual (Ch. 13 / 14.2), Mode B (M280-M287) is the only smoothing mode valid during TCP.
+
+  The fix has four parts:
+
+  1. **`setSmoothing()` rewired for M298 mode** — When enabling smoothing for a multi-axis/TCP section, outputs M280+level (Mode B) instead of M298 Ln. For non-TCP sections, M298 Ln is used as before. Cancellation outputs M299 (fully exits M298 mode) or M289 (Mode B cancel) depending on which was active, tracked by `smoothing.usedModeB`.
+
+  2. **Level mapping** — M298 and Mode B use different level numbering. The M298 level (set by `initializeSmoothing`) is mapped to the equivalent Mode B level by category: roughing→5, semi→3, semifinishing→1, finishing→2. Mappings are stored in `settings.smoothing.modeB*` (see #3).
+
+  3. **`setSmoothing` moved before tool call in `onSection()`** — Smoothing codes must be output before G100 (which activates G43.4 TCP internally). Moved from after coolant to before the `insertToolCall` block. Also moved before G100 in `onClose()`.
+
+  4. **`initializeSmoothing()` TCP transition detection** — Forces smoothing re-output when switching between TCP and non-TCP sections. Without this, the `isDifferent` guard in `setSmoothing()` would skip output when the smoothing level is the same but the required M-code changes (M298 vs M280).
+
+- **Why:** Without this, any program mixing 3-axis and 5-axis operations with smoothing enabled would alarm on the first multi-axis section. The D00 manual explicitly states M280-M287 is valid regardless of TCP state, making it the correct choice for 5-axis work.
+
+- **NC output example (3-axis → 5-axis transition):**
+  ```
+  M299         (cancel M298 mode — required before TCP)
+  ...
+  M282         (Mode B finishing — compatible with TCP)
+  G100 T08 ... G43.4 ...  (tool call activates TCP)
+  ...
+  M289         (cancel Mode B at section end)
+  M298 L6      (back to M298 for next 3-axis section)
+  ```
 
 ---
 

@@ -8,9 +8,9 @@ The upstream post (`brother_speedio.cps`) is a generic post that covers the enti
 
 See [CUSTOMIZATIONS.md](CUSTOMIZATIONS.md) for the full list with rationale. In short:
 
-- **M298 smoothing** — The D00 control uses the M298 Ln system for high-accuracy mode, not the legacy M260/M269 codes. Smoothing is set to automatic with L6 for finishing surfaces.
+- **M298 smoothing with Mode B fallback** — The D00 control uses the M298 Ln system for high-accuracy mode, not the legacy M260/M269 codes. Smoothing is set to automatic with L6 for finishing surfaces. Since M298 is incompatible with G43.4/G43.5 TCP, multi-axis sections automatically use Mode B (M280-M287) instead — the only smoothing mode the D00 allows during TCP.
 - **G68.2 tilted workplane** — Required for [3+2 positional machining](https://plasticranger.com/g68-2-cnc-code/) on the 5-axis trunnion table.
-- **Safe start block** — Outputs `M298 L0` and `G69` at program start to cancel residual smoothing and workplane rotation from previously aborted programs.
+- **Safe start block** — Outputs `M299` and `G69` at program start to cancel residual M298 machining mode and workplane rotation from previously aborted programs.
 - **Washdown coolant** — Enabled between operations for chip management in the enclosed work area.
 - **Clamp codes** — Outputs M443/M441 clamp commands for rigidity during indexed 3+2 work.
 - **Double tap withdraw** — Takes advantage of the 16K spindle for faster G77 tapping cycles.
