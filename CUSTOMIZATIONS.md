@@ -85,7 +85,7 @@ Update this revision number after verifying customizations against a new version
 
 - **Where:** `useSafeProbing` property definition (`grep 'useSafeProbing'`) and `onRapid()` function (`grep 'function onRapid'`)
 - **Default:** `value: true`
-- **What:** Adds a `useSafeProbing` property and modifies `onRapid()` to use G65 P8810 (protected positioning with G31 P2 skip-on-trigger) for all rapid moves when the probe is active. Splits combined XYZ rapids into safe Z-up → XY → Z-down ordering.
+- **What:** Adds a `useSafeProbing` property and modifies `onRapid()` to use G65 P8810 (protected positioning with G31 P2 skip-on-trigger) for all rapid moves when the probe is active. Splits combined XYZ rapids into safe Z-up → XY → Z-down ordering. Only works with Renishaw probes — if `probingType` is set to Blum, a warning is emitted and approach moves fall back to standard G0 rapids.
 - **Why:** The stock post only uses protected positioning during the probing cycle itself (`protectedProbeMove`). The initial approach rapids from the tool change position to the probing area use regular G0 — if WCS is wrong, the probe crashes into the part with no trigger detection. With this enabled, every rapid move with the probe in the spindle goes through O8810, which stops with a PATH OBSTRUCTED alarm on premature contact. Tradeoff: approach moves use F5000 instead of true G0 rapid, so disable for production when you trust your WCS and want maximum speed.
 
 ## 11. M298 / TCP incompatibility — automatic Mode B fallback for multi-axis
@@ -93,26 +93,40 @@ Update this revision number after verifying customizations against a new version
 - **Where:** `setSmoothing()` function, `smoothing` state object, and `initializeSmoothing()` (`grep 'usedModeB'`)
 - **What:** On the D00 control, M298 and G43.4/G43.5 TCP are mutually exclusive. Issuing M298 while TCP is active triggers `<<TCP under control>>`. Issuing G43.4 while M298 is selected triggers `<<TCP control command not possible>>`. Per the programming manual (Ch. 13 / 14.2), Mode B (M280-M287) is the only smoothing mode valid during TCP.
 
-  The fix has four parts:
+  The fix has five parts:
 
   1. **`setSmoothing()` rewired for M298 mode** — When enabling smoothing for a multi-axis/TCP section, outputs M280+level (Mode B) instead of M298 Ln. For non-TCP sections, M298 Ln is used as before. Cancellation outputs M299 (fully exits M298 mode) or M289 (Mode B cancel) depending on which was active, tracked by `smoothing.usedModeB`.
 
-  2. **Level mapping** — M298 and Mode B use different level numbering. The M298 level (set by `initializeSmoothing`) is mapped to the equivalent Mode B level by category: roughing→5, semi→3, semifinishing→1, finishing→2. Mappings are stored in `settings.smoothing.modeB*` (see #3).
+  2. **Explicit cancel when switching between M298 and Mode B** — When `setSmoothing` re-enables smoothing but the mode changes (M298→Mode B or vice versa), the old mode is explicitly canceled first (M299 or M289). This is critical for same-tool transitions between 3-axis and 5-axis sections, where `setSmoothing(false)` may not have been called (it is gated behind `insertToolCall || smoothing.cancel`). Without the explicit cancel, M298 would remain active when Mode B is issued, and the subsequent G43.4 TCP activation would alarm. A warning is also emitted if the smoothing level has no explicit Mode B mapping, to catch misconfigured manual overrides.
 
-  3. **`setSmoothing` moved before tool call in `onSection()`** — Smoothing codes must be output before G100 (which activates G43.4 TCP internally). Moved from after coolant to before the `insertToolCall` block. Also moved before G100 in `onClose()`.
+  3. **Level mapping** — M298 and Mode B use different level numbering. The M298 level (set by `initializeSmoothing`) is mapped to the equivalent Mode B level by category: roughing→5, semi→3, semifinishing→1, finishing→2. Mappings are stored in `settings.smoothing.modeB*` (see #3).
 
-  4. **`initializeSmoothing()` TCP transition detection** — Forces smoothing re-output when switching between TCP and non-TCP sections. Without this, the `isDifferent` guard in `setSmoothing()` would skip output when the smoothing level is the same but the required M-code changes (M298 vs M280).
+  4. **`setSmoothing` moved before tool call in `onSection()`** — Smoothing codes must be output before G100 (which activates G43.4 TCP internally). Moved from after coolant to before the `insertToolCall` block. Also moved before G100 in `onClose()`.
+
+  5. **`initializeSmoothing()` TCP transition detection** — Forces smoothing re-output when switching between TCP and non-TCP sections. Without this, the `isDifferent` guard in `setSmoothing()` would skip output when the smoothing level is the same but the required M-code changes (M298 vs M280).
 
 - **Why:** Without this, any program mixing 3-axis and 5-axis operations with smoothing enabled would alarm on the first multi-axis section. The D00 manual explicitly states M280-M287 is valid regardless of TCP state, making it the correct choice for 5-axis work.
 
-- **NC output example (3-axis → 5-axis transition):**
+- **NC output example (3-axis → 5-axis transition with tool change):**
   ```
-  M299         (cancel M298 mode — required before TCP)
+  M299         (cancel M298 — setSmoothing(false) on tool change)
   ...
   M282         (Mode B finishing — compatible with TCP)
   G100 T08 ... G43.4 ...  (tool call activates TCP)
   ...
   M289         (cancel Mode B at section end)
+  M298 L6      (back to M298 for next 3-axis section)
+  ```
+
+- **NC output example (3-axis → 5-axis transition, same tool / no tool change):**
+  ```
+  M298 L6      (3-axis section active)
+  ...
+  M299         (cancel M298 — explicit cancel inside setSmoothing before switching to Mode B)
+  M282         (Mode B finishing — compatible with TCP)
+  ... G43.4 ...  (TCP activates)
+  ...
+  M289         (cancel Mode B — explicit cancel inside setSmoothing before switching to M298)
   M298 L6      (back to M298 for next 3-axis section)
   ```
 

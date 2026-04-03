@@ -586,6 +586,10 @@ function setSmoothing(mode) {
     } else {
       var useTCP = currentSection.isMultiAxis() || (currentSection.isOptimizedForMachine() && tcp.isSupportedByOperation);
       if (useTCP) {
+        // Cancel M298 if switching from M298 to Mode B (required before TCP can activate)
+        if (!smoothing.usedModeB && smoothing.isActive) {
+          writeBlock(mFormat.format(299));
+        }
         // M298 is incompatible with G43.4/G43.5 TCP — use Mode B (M280-M287) instead.
         // Map M298 level to the equivalent Mode B level by smoothing category.
         var modeBLevel = smoothing.level;
@@ -597,10 +601,16 @@ function setSmoothing(mode) {
           modeBLevel = settings.smoothing.modeBSemifinishing;
         } else if (smoothing.level == settings.smoothing.finishing) {
           modeBLevel = settings.smoothing.modeBFinishing;
+        } else {
+          warning(subst("Smoothing level '%1' has no explicit Mode B mapping — using raw level as Mode B offset.", smoothing.level));
         }
         writeBlock(mFormat.format(280 + modeBLevel));
         smoothing.usedModeB = true;
       } else {
+        // Cancel Mode B if switching from Mode B to M298
+        if (smoothing.usedModeB && smoothing.isActive) {
+          writeBlock(mFormat.format(289));
+        }
         writeBlock(mFormat.format(298), "L" + smoothing.level);
         smoothing.usedModeB = false;
       }
@@ -3226,15 +3236,20 @@ function onRapid(_x, _y, _z) {
     }
     // Use protected positioning (G31 P2 skip-on-trigger) for all rapid moves when probe is active.
     // Prevents probe damage from premature contact during approach moves if WCS is wrong.
-    if (tool.type == TOOL_PROBE && getProperty("useSafeProbing") && getProperty("probingType") == "Renishaw") {
-      if (z && _z >= getCurrentPosition().z) {
-        writeBlock(gFormat.format(65), "P" + 8810, z, getFeed(highFeedrate));
-      }
-      if (x || y) {
-        writeBlock(gFormat.format(65), "P" + 8810, x, y, getFeed(highFeedrate));
-      }
-      if (z && _z < getCurrentPosition().z) {
-        writeBlock(gFormat.format(65), "P" + 8810, z, getFeed(highFeedrate));
+    if (tool.type == TOOL_PROBE && getProperty("useSafeProbing")) {
+      if (getProperty("probingType") != "Renishaw") {
+        warning(localize("Safe probing is only supported for Renishaw probes. Blum approach moves will use standard rapids."));
+        writeBlock(gMotionModal.format(0), x, y, z);
+      } else {
+        if (z && _z >= getCurrentPosition().z) {
+          writeBlock(gFormat.format(65), "P" + 8810, z, getFeed(highFeedrate));
+        }
+        if (x || y) {
+          writeBlock(gFormat.format(65), "P" + 8810, x, y, getFeed(highFeedrate));
+        }
+        if (z && _z < getCurrentPosition().z) {
+          writeBlock(gFormat.format(65), "P" + 8810, z, getFeed(highFeedrate));
+        }
       }
     } else {
       writeBlock(gMotionModal.format(0), x, y, z);
