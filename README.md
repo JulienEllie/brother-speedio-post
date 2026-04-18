@@ -57,17 +57,21 @@ If `useSmoothing` is changed from Automatic to a fixed level in the post propert
 
 Note: manual override uses raw level numbers (0-5), which differ from the automatic mode levels (2, 3, 4, 6). Automatic is recommended — it picks the right level per operation based on your CAM setup.
 
+## Repo layout
+
+- `upstream/<rev>_<date>.cps` — committed vanilla snapshots from Autodesk (one per pulled version)
+- `modified/<rev>_<date>.cps` — our customized versions (one per upstream bump)
+- `tests/` — regression testing harness (see [tests/README.md](tests/README.md))
+
+Fusion should be pointed at the most recent `modified/<latest>.cps` as its post processor.
+
 ## Updating to a new upstream version
 
 ```bash
 bash update.sh
 ```
 
-This downloads the latest post from the [Autodesk post library](https://cam.autodesk.com/hsmposts), extracts the JavaScript source, and saves it as `brother_speedio.cps`. After updating, review [CUSTOMIZATIONS.md](CUSTOMIZATIONS.md) and re-apply the changes.
-
-## Regression testing
-
-`tests/regression.sh` posts the customized `.cps` against a set of milling and probing fixtures and diffs the output against a previous run. See [tests/README.md](tests/README.md) for the full workflow. Run it after every upstream bump.
+This downloads the latest post from the [Autodesk post library](https://cam.autodesk.com/hsmposts), parses its `$Revision` / `$Date`, and saves it as `upstream/<rev>_<date>.cps`. It also seeds `modified/<rev>_<date>.cps` by copying the previous modified version, giving you a starting point for re-applying our changes. Review [CUSTOMIZATIONS.md](CUSTOMIZATIONS.md), merge upstream's changes into the new modified file, then run `tests/regression.sh` to verify.
 
 ## Disclaimer
 
