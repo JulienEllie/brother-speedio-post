@@ -1,14 +1,6 @@
 /**
-  Original copyright (C) 2012-2026 by Autodesk, Inc.
+  Copyright (C) 2012-2026 by Autodesk, Inc.
   All rights reserved.
-
-  Update by Microfactory.us. This post processor is provided as-is, 
-  with no promises or guarantees of accuracy, safety, 
-  or fitness for any purpose. Use it at your own risk. You are 
-  responsible for verifying all G-code output before running 
-  it on your machine. I am not responsible for any damage to your machine, 
-  tooling, workpiece, or anything else — 
-  including but not limited to setting your machine on fire.
 
   Brother Speedio post processor configuration.
 
@@ -18,14 +10,14 @@
   FORKID {C09133CD-6F13-4DFC-9EB8-41260FBB5B08}
 */
 
-description = "Microfactory.us edit of Brother Speedio";
-vendor = "Microfactory.us";
-vendorUrl = "http://www.microfactory.us";
+description = "Brother Speedio";
+vendor = "Brother";
+vendorUrl = "http://www.brother.com";
 legal = "Copyright (C) 2012-2026 by Autodesk, Inc.";
 certificationLevel = 2;
 minimumRevision = 45917;
 
-longDescription = "Generic milling post for use with recent series machines.";
+longDescription = "Generic milling post for use with all common Brother Speedio mills like S, W, R, U, F and H series machines.";
 
 extension = "NC";
 programNameIsInteger = false;
@@ -146,14 +138,6 @@ properties = {
     value: "Renishaw",
     scope: "post"
   },
-  useSafeProbing: {
-    title      : "Enable safe probing",
-    description: "Uses protected positioning (G31 P2 skip-on-trigger via O8810) for all rapid moves when the probe is active, not just during measurement cycles. If the probe contacts anything during approach moves, the machine stops with a PATH OBSTRUCTED alarm instead of crashing the probe. Approach moves use feedrate (F5000) instead of true rapid (G0), so disable this if you trust your WCS and want maximum speed in production.",
-    group      : "probing",
-    type       : "boolean",
-    value      : true,
-    scope      : "post"
-  },
   washdownCoolant: {
     title      : "Washdown coolant",
     description: "Specifies whether washdown coolant should be used and where it is output.",
@@ -165,7 +149,7 @@ properties = {
       {title:"End of operation", id:"operationEnd"},
       {title:"Program end", id:"programEnd"}
     ],
-    value: "operationEnd",
+    value: "off",
     scope: "post"
   },
   usePitchForTapping: {
@@ -181,14 +165,6 @@ properties = {
     description: "If enabled, an L value containing double the spindle speed (up to 6000) will be output in the G77 tapping cycle.",
     group      : "preferences",
     type       : "boolean",
-    value      : true,
-    scope      : "post"
-  },
-  useStuckChipsDetection: {
-    title      : "Stuck chips detection",
-    description: "Enables stuck chips detection (M318) during tool changes. The D00 monitors Z-axis load to detect foreign objects between the spindle face and tool holder. Only enable once your magazine tool lineup is stable — detection compares against learned baselines, so frequent tool swaps cause false alarms.",
-    group      : "preferences",
-    type       : "boolean",
     value      : false,
     scope      : "post"
   },
@@ -197,7 +173,7 @@ properties = {
     description: "Specifies whether clamp codes for rotary axes should be output. For simultaneous toolpaths rotary axes will always get unclamped.",
     group      : "multiAxis",
     type       : "boolean",
-    value      : true,
+    value      : false,
     scope      : "post"
   },
   smoothingMode: {
@@ -210,7 +186,7 @@ properties = {
       {title:"B", id:"B"},
       {title:"M298", id:"M298"}
     ],
-    value: "M298"
+    value: "A"
   },
   useSmoothing: {
     title      : "High accuracy level",
@@ -227,7 +203,7 @@ properties = {
       {title:"Finishing", id:"4"}, // 1
       {title:"Finishing high", id:"5"} // 2
     ],
-    value: "9999"
+    value: "-1"
   },
   useMachiningLoadMonitor: {
     title      : "Machining Load Monitor",
@@ -268,7 +244,7 @@ properties = {
     description: "Enable to use G68.2 for 3+2 operations.",
     group      : "multiAxis",
     type       : "boolean",
-    value      : true,
+    value      : false,
     scope      : "machine"
   },
   singleResultsFile: {
@@ -514,17 +490,6 @@ function onOpen() {
     settings.smoothing.semifinishing = 1;
     settings.smoothing.finishing = 2;
     break;
-  case "M298":
-    // Only finishing is overridden — the framework defaults for roughing/semi/semifinishing
-    // map correctly to the M298 Ln levels used by the D00 control.
-    settings.smoothing.finishing = 6; // M298 L6 = Finishing S
-    // M298 is incompatible with TCP (G43.4/G43.5). For multi-axis TCP operations,
-    // Mode B (M280-M287) is used instead — it is valid regardless of TCP state.
-    settings.smoothing.modeBRoughing = 5;
-    settings.smoothing.modeBSemi = 3;
-    settings.smoothing.modeBSemifinishing = 1;
-    settings.smoothing.modeBFinishing = 2;
-    break;
   }
 
   fourthAxisClamp.format(443); // Default 4th axis modal code to be clamped
@@ -545,11 +510,6 @@ function onOpen() {
   // absolute coordinates and feed per min
   writeBlock(gMotionModal.format(0), gAbsIncModal.format(90), gFormat.format(40), gFormat.format(80));
   writeBlock(gFeedModeModal.format(94), toolLengthCompOutput.format(49));
-  writeBlock(mFormat.format(299)); // cancel M298 machining mode (required before TCP)
-  writeBlock(gFormat.format(69));        // cancel tilted workplane
-  if (getProperty("useStuckChipsDetection")) {
-    writeBlock(mFormat.format(318)); // enable stuck chips detection
-  }
 
   writeComment("File output in " + (unit == 1 ? "MM" : "inches") + ". Please ensure the unit is set correctly on the control");
   validateCommonParameters();
@@ -574,47 +534,8 @@ function setSmoothing(mode) {
   case "B":
     writeBlock(mFormat.format(mode ? 280 + mappedLevel : 289));
     break;
-  default: // M298
-    if (!mode) {
-      // Cancel: use M299 if M298 was active, M289 if Mode B was active
-      if (smoothing.usedModeB) {
-        writeBlock(mFormat.format(289));
-      } else {
-        writeBlock(mFormat.format(299));
-      }
-      smoothing.usedModeB = false;
-    } else {
-      var useTCP = currentSection.isMultiAxis() || (currentSection.isOptimizedForMachine() && tcp.isSupportedByOperation);
-      if (useTCP) {
-        // Cancel M298 if switching from M298 to Mode B (required before TCP can activate)
-        if (!smoothing.usedModeB && smoothing.isActive) {
-          writeBlock(mFormat.format(299));
-        }
-        // M298 is incompatible with G43.4/G43.5 TCP — use Mode B (M280-M287) instead.
-        // Map M298 level to the equivalent Mode B level by smoothing category.
-        var modeBLevel = smoothing.level;
-        if (smoothing.level == settings.smoothing.roughing) {
-          modeBLevel = settings.smoothing.modeBRoughing;
-        } else if (smoothing.level == settings.smoothing.semi) {
-          modeBLevel = settings.smoothing.modeBSemi;
-        } else if (smoothing.level == settings.smoothing.semifinishing) {
-          modeBLevel = settings.smoothing.modeBSemifinishing;
-        } else if (smoothing.level == settings.smoothing.finishing) {
-          modeBLevel = settings.smoothing.modeBFinishing;
-        } else {
-          warning(subst("Smoothing level '%1' has no explicit Mode B mapping — using raw level as Mode B offset.", smoothing.level));
-        }
-        writeBlock(mFormat.format(280 + modeBLevel));
-        smoothing.usedModeB = true;
-      } else {
-        // Cancel Mode B if switching from Mode B to M298
-        if (smoothing.usedModeB && smoothing.isActive) {
-          writeBlock(mFormat.format(289));
-        }
-        writeBlock(mFormat.format(298), "L" + smoothing.level);
-        smoothing.usedModeB = false;
-      }
-    }
+  default:
+    writeBlock(mFormat.format(298), mode ? "L" + smoothing.level : "L0");
     break;
   }
   smoothing.isActive = mode;
@@ -673,8 +594,6 @@ function onSection() {
   }
   writeWCS(currentSection, wcsIsRequired);
 
-  setSmoothing(smoothing.isAllowed); // must be set before G100/G43.4 activates TCP
-
   if (insertToolCall) {
     if (tool.manualToolChange) {
       error(localize("Manual tool change is not supported by this postprocessor."));
@@ -714,6 +633,8 @@ function onSection() {
       }
     }
   }
+
+  setSmoothing(smoothing.isAllowed);
 
   if (getProperty("washdownCoolant") == "always") {
     writeBlock(washdownModal.format(tool.type == TOOL_PROBE ? washdownCoolant.off : washdownCoolant.on));
@@ -1919,13 +1840,12 @@ function onClose() {
     writeBlock(washdownModal.format(washdownCoolant.off));
   }
 
-  setSmoothing(false); // cancel smoothing before G100 which activates TCP
-
   var firstToolNumber = getSection(0).getTool().number;
   writeBlock(gFormat.format(100), "T" + toolFormat.format(firstToolNumber));
   if (getSetting("retract.homeXY.onProgramEnd", false)) {
     writeRetract(settings.retract.homeXY.onProgramEnd);
   }
+  setSmoothing(false);
   setWorkPlane(new Vector(0, 0, 0)); // reset working plane
   if (typeof inspectionProcessSectionEnd == "function") {
     inspectionProcessSectionEnd();
@@ -3055,8 +2975,7 @@ var smoothing = {
   isDifferent: false, // tells if smoothing levels/tolerances/both are different between operations
   level      : -1, // the active level of smoothing
   tolerance  : -1, // the current operation tolerance
-  force      : false, // smoothing needs to be forced out in this operation
-  usedModeB  : false // true when Mode B was used instead of M298 (for TCP sections)
+  force      : false // smoothing needs to be forced out in this operation
 };
 
 function initializeSmoothing(_section) {
@@ -3133,17 +3052,6 @@ function initializeSmoothing(_section) {
   default:
     error(localize("Unsupported smoothing criteria."));
     return;
-  }
-
-  // M298 mode: force smoothing re-output when switching between TCP and non-TCP sections,
-  // because the actual codes change (M298 vs M280-M287) even if the level is the same.
-  if (_section.getProperty("smoothingMode") == "M298" && !isFirstSection() && smoothing.isActive) {
-    var prevMultiAxis = getPreviousSection().isMultiAxis();
-    var curMultiAxis = _section.isMultiAxis();
-    if (prevMultiAxis != curMultiAxis) {
-      smoothing.isDifferent = true;
-      smoothing.force = true;
-    }
   }
 
   // tool length compensation needs to be canceled when smoothing state/level changes
@@ -3238,26 +3146,7 @@ function onRapid(_x, _y, _z) {
       error(localize("Radius compensation mode cannot be changed at rapid traversal."));
       return;
     }
-    // Use protected positioning (G31 P2 skip-on-trigger) for all rapid moves when probe is active.
-    // Prevents probe damage from premature contact during approach moves if WCS is wrong.
-    if (tool.type == TOOL_PROBE && getProperty("useSafeProbing")) {
-      if (getProperty("probingType") != "Renishaw") {
-        warning(localize("Safe probing is only supported for Renishaw probes. Blum approach moves will use standard rapids."));
-        writeBlock(gMotionModal.format(0), x, y, z);
-      } else {
-        if (z && _z >= getCurrentPosition().z) {
-          writeBlock(gFormat.format(65), "P" + 8810, z, getFeed(highFeedrate));
-        }
-        if (x || y) {
-          writeBlock(gFormat.format(65), "P" + 8810, x, y, getFeed(highFeedrate));
-        }
-        if (z && _z < getCurrentPosition().z) {
-          writeBlock(gFormat.format(65), "P" + 8810, z, getFeed(highFeedrate));
-        }
-      }
-    } else {
-      writeBlock(gMotionModal.format(0), x, y, z);
-    }
+    writeBlock(gMotionModal.format(0), x, y, z);
     forceFeed();
   }
 }
