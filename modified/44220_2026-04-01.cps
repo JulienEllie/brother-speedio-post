@@ -3112,7 +3112,11 @@ function initializeSmoothing(_section) {
   } else {
     smoothing.isAllowed = !(_section.getTool().type == TOOL_PROBE || isDrillingCycle(_section)) || (_section.isConnectionSection && _section.isConnectionSection() && _section.isMultiAxis());
     if (isFirstSection()) {
-      smoothing.isActive = undefined;
+      // Upstream writes `undefined` here, but setSmoothing's `mode == smoothing.isActive`
+      // early-return then misfires (false == undefined → false) and emits a redundant M299
+      // on the first drilling/probing section. Our onOpen already wrote M299 as part of
+      // the safe-start, so `false` is an accurate reflection of the control state.
+      smoothing.isActive = false;
     }
   }
   if (!smoothing.isAllowed) {
