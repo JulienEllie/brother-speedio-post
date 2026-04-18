@@ -77,6 +77,10 @@ This downloads the latest post from the [Autodesk post library](https://cam.auto
 
 This post processor is provided as-is, with no promises or guarantees of accuracy, safety, or fitness for any purpose. Use it at your own risk. You are responsible for verifying all G-code output before running it on your machine. I am not responsible for any damage to your machine, tooling, workpiece, or anything else — including but not limited to setting your machine on fire.
 
+## License
+
+Original work in this repo is MIT-licensed — see [LICENSE](LICENSE). Upstream Brother Speedio post (`upstream/*.cps`) is Autodesk's work and remains subject to their terms; CNC fixtures under `tests/fixtures/` are redistributed under MIT with Autodesk's 2017 copyright (see [tests/fixtures/LICENSE](tests/fixtures/LICENSE)).
+
 ## Links
 
 - [Autodesk post processor library](https://cam.autodesk.com/hsmposts) — upstream source
