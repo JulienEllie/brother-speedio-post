@@ -60,6 +60,9 @@ cmd_run() {
     mkdir -p "$(dirname "$out")"
     local -a post_args=(--log /dev/null)
     [[ -n "${MACHINE_FILE:-}" ]] && post_args+=(--machine "$MACHINE_FILE")
+    # Only emit N numbers on tool changes so inserting/removing a line doesn't
+    # shift every subsequent N and create noise in regression diffs.
+    post_args+=(--property showSequenceNumbers '"toolChange"')
     post_args+=("$cps" "$cnc" "$out")
     if "$POST_BIN" "${post_args[@]}" >/dev/null 2>&1; then
       count=$((count+1))
