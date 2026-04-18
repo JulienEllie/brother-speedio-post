@@ -121,22 +121,6 @@ properties = {
     value      : false,
     scope      : "post"
   },
-  hasAAxis: {
-    title      : "Use A-axis",
-    description: "Specifies whether to use the A axis.",
-    group      : "configuration",
-    type       : "boolean",
-    value      : false,
-    scope      : "post"
-  },
-  useTrunnion: {
-    title      : "Use AC-trunnion",
-    description: "Enables a trunnion table with an A and C-axis.",
-    group      : "configuration",
-    type       : "boolean",
-    value      : false,
-    scope      : "post"
-  },
   probingType: {
     title      : "Probing type",
     description: "Specified what probing cycles are used on the machine.",
@@ -209,7 +193,6 @@ properties = {
     group      : "preferences",
     type       : "enum",
     values     : [
-      {title:"A", id:"A"},
       {title:"B", id:"B"},
       {title:"M298", id:"M298"}
     ],
@@ -423,29 +406,9 @@ var probeVariables = {
 };
 
 function defineMachine() {
-  if ((getProperty("useTrunnion") || getProperty("hasAAxis")) && (receivedMachineConfiguration && machineConfiguration.isMultiAxisConfiguration())) {
-    error(localize("You can only select either a machine in the CAM setup or use the properties to define your kinematics."));
-  }
-
-  var useTCP = false;
-  if (getProperty("useTrunnion")) {
-    var aAxis = createAxis({coordinate:0, table:true, axis:[1, 0, 0], range:[-30, 120], preference:1, tcp:useTCP});
-    var cAxis = createAxis({coordinate:2, table:true, axis:[0, 0, 1], cyclic:true, tcp:useTCP});
-    machineConfiguration = new MachineConfiguration(aAxis, cAxis);
-    setMachineConfiguration(machineConfiguration);
-    if (receivedMachineConfiguration) {
-      warning(localize("The provided CAM machine configuration is overwritten by the postprocessor."));
-      receivedMachineConfiguration = false; // CAM provided machine configuration is overwritten
-    }
-  } else if (getProperty("hasAAxis")) { // note: setup your machine here
-    var aAxis = createAxis({coordinate:0, table:true, axis:[1, 0, 0], range:[-360, 360], preference:1, tcp:useTCP});
-    machineConfiguration = new MachineConfiguration(aAxis);
-    setMachineConfiguration(machineConfiguration);
-    if (receivedMachineConfiguration) {
-      warning(localize("The provided CAM machine configuration is overwritten by the postprocessor."));
-      receivedMachineConfiguration = false; // CAM provided machine configuration is overwritten
-    }
-  }
+  // Kinematics come from the CAM setup's machine configuration (.mch). The U500XD2-5AX
+  // is a B+C trunnion — the legacy hasAAxis / useTrunnion property toggles that
+  // configured an A-axis or A+C trunnion from the post have been removed.
 
   if (!receivedMachineConfiguration) {
     // multiaxis settings
@@ -510,7 +473,6 @@ function onOpen() {
 
   // setup for proper smoothing mode
   switch (getProperty("smoothingMode")) {
-  case "A":
   case "B":
     settings.smoothing.roughing = 5;
     settings.smoothing.semi = 3;
@@ -566,14 +528,11 @@ function setSmoothing(mode) {
     validate(!state.lengthCompensationActive, "Length compensation is active while trying to update smoothing.");
   }
 
-  // for smoothingModes A and B mapping is required for smoothing level value
+  // for smoothingMode B mapping is required for smoothing level value
   var propertyBaseLevel = parseInt(getProperty("useSmoothing"), 10);
   propertyBaseLevel = isNaN(propertyBaseLevel) ? -1 : propertyBaseLevel;
   var mappedLevel = (propertyBaseLevel >= 0 && propertyBaseLevel <= 5) ? [0, 5, 3, 4, 1, 2][propertyBaseLevel] : smoothing.level;
   switch (getProperty("smoothingMode")) {
-  case "A":
-    writeBlock(mFormat.format(mode ? 260 + mappedLevel : 269));
-    break;
   case "B":
     writeBlock(mFormat.format(mode ? 280 + mappedLevel : 289));
     break;

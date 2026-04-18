@@ -2,7 +2,7 @@
 
 Machine: **U500XD2-5AX** (CNC-D00v control, 16K RPM, CTS, 28-tool, Renishaw probe)
 
-Last verified against upstream revision: **44214** (2026-02-17)
+Last verified against upstream revision: **44220** (2026-04-01)
 
 These changes should be re-applied each time `update.sh` pulls a new upstream version.
 Update this revision number after verifying customizations against a new version.
@@ -130,11 +130,11 @@ Update this revision number after verifying customizations against a new version
   M298 L6      (back to M298 for next 3-axis section)
   ```
 
----
+## 12. Prune wrong-machine properties and legacy Mode A
 
-## Do NOT change
-
-| Property | Keep as | Why |
-|---|---|---|
-| `useTrunnion` | `false` | 5-axis machine configuration comes from the CAM system's machine definition. Enabling this when a CAM machine config is present causes an error. |
-| `hasAAxis` | `false` | Same reason — axis definitions come from the machine configuration in CAM. |
+- **Where:** Property definitions at the top of the file and the smoothing mode switches (`grep 'hasAAxis\|useTrunnion\|case "A"'`)
+- **What:** Removed three properties / code paths that are invalid for the U500XD2-5AX + CNC-D00v combination:
+  1. **`hasAAxis` property** (and the `createAxis` block that configured an A rotary from post-side) — the U500XD2 trunnion is B+C, no A axis.
+  2. **`useTrunnion` property** (and the `createAxis` block that configured an A+C trunnion from post-side) — described specifically as "A and C-axis", wrong kinematics for our B+C trunnion. Machine kinematics come from the `.mch` file in the CAM setup anyway.
+  3. **`smoothingMode` value `"A"`** (and the `case "A":` branches in `onOpen` and `setSmoothing`) — Mode A outputs M260/M269, which is the legacy CNC-B00/C00 smoothing syntax. D00v does not support it. Mode B and M298 remain.
+- **Why:** These parameters could never produce correct output on this machine, and exposing them risks someone toggling one and getting wrong kinematics or invalid M-codes. Simplifies `defineMachine()` to rely purely on the CAM-provided machine config (which is the correct source of truth for axis ranges, trunnion layout, etc.).
