@@ -46,4 +46,4 @@ diff -u "$(./tests/regression.sh show modified <labelA> Milling/3+2/b30)" \
 
 ## Fixture attribution
 
-The `.cnc` fixtures under `tests/fixtures/Milling` and `tests/fixtures/Probing` are copied from Autodesk's [cam-posteditor](https://github.com/Autodesk/cam-posteditor) VS Code extension (`vs-code-extension/res/CNC files/`), MIT-licensed. Copyright © 2017 Autodesk, Inc. The set has been pruned to what runs cleanly on the U500XD2-5AX machine configuration (A-axis-only, air/mist/suction coolant, and inspect-surface probing fixtures were removed as unsupported).
+The `.cnc` fixtures under `tests/fixtures/Milling` and `tests/fixtures/Probing` are copied from Autodesk's [cam-posteditor](https://github.com/Autodesk/cam-posteditor) VS Code extension (`vs-code-extension/res/CNC files/`), MIT-licensed. Copyright © 2017 Autodesk, Inc. The full MIT license text is reproduced in [tests/fixtures/LICENSE](fixtures/LICENSE). The set has been pruned to what runs cleanly on the U500XD2-5AX machine configuration (A-axis-only, air/mist/suction coolant, and inspect-surface probing fixtures were removed as unsupported).
