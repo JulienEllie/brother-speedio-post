@@ -1,0 +1,177 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Regression harness for the Brother Speedio post processor.
+# See tests/README.md for the workflow.
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+[[ -f "$SCRIPT_DIR/post.env" ]] && source "$SCRIPT_DIR/post.env"
+
+FIXTURES_DIR="${FIXTURES_DIR:-$SCRIPT_DIR/fixtures}"
+RUNS_DIR="$SCRIPT_DIR/runs"
+
+if [[ -z "${POST_BIN:-}" ]]; then
+  POST_BIN=$(find "$HOME/Library/Application Support/Autodesk/webdeploy/production" \
+    -maxdepth 10 -name post -type f 2>/dev/null | head -1 || true)
+fi
+
+require_post_bin() {
+  if [[ -z "${POST_BIN:-}" || ! -x "$POST_BIN" ]]; then
+    echo "error: POST_BIN not set or not executable." >&2
+    echo "Copy tests/post.env.example to tests/post.env and set POST_BIN." >&2
+    exit 1
+  fi
+}
+
+derive_label() {
+  local cps="$1" rev date
+  rev=$(grep -m1 '\$Revision:' "$cps" | awk '{print $2}')
+  date=$(grep -m1 '\$Date:' "$cps" | awk '{print $2}')
+  if [[ -z "$rev" || -z "$date" ]]; then
+    echo "error: could not derive label from $cps (missing \$Revision or \$Date)" >&2
+    exit 1
+  fi
+  echo "${rev}_${date}"
+}
+
+cmd_run() {
+  local kind="${1:-}" cps="${2:-}"
+  if [[ "$kind" != "upstream" && "$kind" != "modified" ]]; then
+    echo "usage: $0 run <upstream|modified> <path-to-cps>" >&2; exit 1
+  fi
+  [[ -f "$cps" ]] || { echo "error: cps not found: $cps" >&2; exit 1; }
+  require_post_bin
+
+  local label out_dir count=0 failures=0
+  label=$(derive_label "$cps")
+  out_dir="$RUNS_DIR/$kind/$label"
+  rm -rf "$out_dir"
+  mkdir -p "$out_dir"
+
+  echo "Posting $(basename "$cps") against $FIXTURES_DIR"
+  echo "  label:   $label"
+  echo "  output:  $out_dir"
+  [[ -n "${MACHINE_FILE:-}" ]] && echo "  machine: $(basename "$MACHINE_FILE")"
+
+  while IFS= read -r -d '' cnc; do
+    local rel="${cnc#$FIXTURES_DIR/}"
+    local out="$out_dir/${rel%.cnc}.nc"
+    mkdir -p "$(dirname "$out")"
+    local -a post_args=(--log /dev/null)
+    [[ -n "${MACHINE_FILE:-}" ]] && post_args+=(--machine "$MACHINE_FILE")
+    post_args+=("$cps" "$cnc" "$out")
+    if "$POST_BIN" "${post_args[@]}" >/dev/null 2>&1; then
+      count=$((count+1))
+    else
+      failures=$((failures+1))
+      echo "  FAIL: $rel"
+    fi
+  done < <(find "$FIXTURES_DIR" -name "*.cnc" -print0)
+
+  echo "Done: $count posted, $failures failed."
+  [[ $failures -eq 0 ]]
+}
+
+summarize_diff() {
+  local dir_a="$1" dir_b="$2"
+  local changed=0 only_a=0 only_b=0
+
+  while IFS= read -r -d '' file; do
+    local rel="${file#$dir_a/}"
+    if [[ -f "$dir_b/$rel" ]]; then
+      if ! cmp -s "$file" "$dir_b/$rel"; then
+        echo "  CHANGED: $rel"
+        changed=$((changed+1))
+      fi
+    else
+      echo "  REMOVED: $rel"
+      only_a=$((only_a+1))
+    fi
+  done < <(find "$dir_a" -type f ! -name "*.failed" -print0)
+
+  while IFS= read -r -d '' file; do
+    local rel="${file#$dir_b/}"
+    if [[ ! -f "$dir_a/$rel" ]]; then
+      echo "  ADDED:   $rel"
+      only_b=$((only_b+1))
+    fi
+  done < <(find "$dir_b" -type f ! -name "*.failed" -print0)
+
+  echo ""
+  echo "Summary: $changed changed, $only_a only-in-A, $only_b only-in-B"
+}
+
+cmd_diff() {
+  local kind="${1:-}" a="${2:-}" b="${3:-}"
+  if [[ "$kind" != "upstream" && "$kind" != "modified" ]] || [[ -z "$a" || -z "$b" ]]; then
+    echo "usage: $0 diff <upstream|modified> <labelA> <labelB>" >&2; exit 1
+  fi
+  local dir_a="$RUNS_DIR/$kind/$a" dir_b="$RUNS_DIR/$kind/$b"
+  [[ -d "$dir_a" ]] || { echo "error: missing $dir_a" >&2; exit 1; }
+  [[ -d "$dir_b" ]] || { echo "error: missing $dir_b" >&2; exit 1; }
+  echo "Diff $kind: $a -> $b"
+  summarize_diff "$dir_a" "$dir_b"
+}
+
+cmd_diff_pair() {
+  local label="${1:-}"
+  [[ -n "$label" ]] || { echo "usage: $0 diff-pair <label>" >&2; exit 1; }
+  local dir_u="$RUNS_DIR/upstream/$label" dir_m="$RUNS_DIR/modified/$label"
+  [[ -d "$dir_u" ]] || { echo "error: missing $dir_u" >&2; exit 1; }
+  [[ -d "$dir_m" ]] || { echo "error: missing $dir_m" >&2; exit 1; }
+  echo "Diff upstream vs modified at $label"
+  summarize_diff "$dir_u" "$dir_m"
+}
+
+cmd_show() {
+  local kind="${1:-}" label="${2:-}" file="${3:-}"
+  if [[ -z "$kind" || -z "$label" || -z "$file" ]]; then
+    echo "usage: $0 show <upstream|modified> <label> <fixture-relative-path>" >&2; exit 1
+  fi
+  local path="$RUNS_DIR/$kind/$label/${file%.cnc}.nc"
+  path="${path%.nc}.nc"
+  [[ -f "$path" ]] || { echo "error: not found: $path" >&2; exit 1; }
+  echo "$path"
+}
+
+cmd_list() {
+  for kind in upstream modified; do
+    echo "$kind runs:"
+    if [[ -d "$RUNS_DIR/$kind" ]]; then
+      ls -1 "$RUNS_DIR/$kind" 2>/dev/null | sed 's/^/  /'
+    else
+      echo "  (none)"
+    fi
+  done
+}
+
+usage() {
+  cat <<EOF
+usage: $0 <command> [args]
+
+commands:
+  run <upstream|modified> <cps>       Post all fixtures through the given .cps,
+                                       label derived from its \$Revision / \$Date.
+  diff <upstream|modified> <A> <B>    Compare two labeled runs of the same kind
+                                       (the regression check).
+  diff-pair <label>                   Compare upstream vs modified at a given
+                                       label (inspect what our changes produce).
+  list                                List available labeled runs.
+
+environment (override via tests/post.env):
+  POST_BIN        Path to Autodesk post binary (auto-detected on macOS).
+  MACHINE_FILE    Path to .mch machine config (required for 4/5-axis fixtures).
+  FIXTURES_DIR    Fixture root (default: tests/fixtures).
+EOF
+}
+
+case "${1:-}" in
+  run)       shift; cmd_run "$@" ;;
+  diff)      shift; cmd_diff "$@" ;;
+  diff-pair) shift; cmd_diff_pair "$@" ;;
+  show)      shift; cmd_show "$@" ;;
+  list)      cmd_list ;;
+  ""|-h|--help|help) usage ;;
+  *) echo "unknown command: $1" >&2; usage; exit 1 ;;
+esac

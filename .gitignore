@@ -37,3 +37,7 @@ pnpm-debug.log*
 *.swp
 *.swo
 *~
+
+# Regression test outputs and machine-local config
+tests/runs/
+tests/post.env
