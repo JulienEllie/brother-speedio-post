@@ -34,7 +34,7 @@ Update this revision number after verifying customizations against a new version
   settings.smoothing.modeBSemifinishing = 1;
   settings.smoothing.modeBFinishing = 2;
   ```
-- **Why:** The framework default for finishing is L5. M298 L6 ("Finishing S") is the optimal setting for 3D surface finishing on the D00 control. The Mode B levels are fallback mappings used by `setSmoothing()` during multi-axis TCP operations (see #11).
+- **Why:** The framework default for finishing is L5. M298 L6 ("Finishing S") is the optimal setting for 3D surface finishing on the D00 control. The Mode B levels are fallback mappings used by `setSmoothing()` during multi-axis TCP operations (see #10).
 
 ## 4. Enable G68.2 (tilted workplane)
 
@@ -60,35 +60,28 @@ Update this revision number after verifying customizations against a new version
 - **To:** `value: "operationEnd"`
 - **Why:** Activates chip washdown between operations for better chip management in the enclosed work area.
 
-## 7. Enable clamp codes
-
-- **Where:** `useClampCodes` property definition (`grep 'useClampCodes'`)
-- **From:** `value: false`
-- **To:** `value: true`
-- **Why:** Outputs M443/M444 (4th axis) and M441/M442 (5th axis) clamp/unclamp codes for improved rigidity during 3+2 indexed work.
-
-## 8. Double tap withdraw speed
+## 7. Double tap withdraw speed
 
 - **Where:** `doubleTapWithdrawSpeed` property definition (`grep 'doubleTapWithdrawSpeed'`)
 - **From:** `value: false`
 - **To:** `value: true`
 - **Why:** Outputs an L value in G77 tapping cycles for faster withdrawal (up to 6000 RPM). Takes advantage of the 16K spindle's capability.
 
-## 9. Stuck chips detection (optional, default OFF)
+## 8. Stuck chips detection (optional, default OFF)
 
 - **Where:** `useStuckChipsDetection` property definition (`grep 'useStuckChipsDetection'`)
 - **Default:** `value: false`
 - **To enable:** `value: true`
 - **Why:** Outputs M318 at program start to enable Z-axis load monitoring during tool changes. The D00 compares each tool change load signature against a learned baseline to detect chips or debris stuck between the spindle face and tool holder. Only useful once your magazine is stable — the detection compares against previously recorded load profiles, so if you're frequently swapping tools in/out of the magazine, the baselines won't be meaningful and you'll get false alarms. Enable this for production runs where the tool lineup is settled.
 
-## 10. Safe probing — protected approach moves
+## 9. Safe probing — protected approach moves
 
 - **Where:** `useSafeProbing` property definition (`grep 'useSafeProbing'`) and `onRapid()` function (`grep 'function onRapid'`)
 - **Default:** `value: true`
 - **What:** Adds a `useSafeProbing` property and modifies `onRapid()` to use G65 P8810 (protected positioning with G31 P2 skip-on-trigger) for all rapid moves when the probe is active. Splits combined XYZ rapids into safe Z-up → XY → Z-down ordering. Only works with Renishaw probes — if `probingType` is set to Blum, a warning is emitted and approach moves fall back to standard G0 rapids.
 - **Why:** The stock post only uses protected positioning during the probing cycle itself (`protectedProbeMove`). The initial approach rapids from the tool change position to the probing area use regular G0 — if WCS is wrong, the probe crashes into the part with no trigger detection. With this enabled, every rapid move with the probe in the spindle goes through O8810, which stops with a PATH OBSTRUCTED alarm on premature contact. Tradeoff: approach moves use F5000 instead of true G0 rapid, so disable for production when you trust your WCS and want maximum speed.
 
-## 11. M298 / TCP incompatibility — automatic Mode B fallback for multi-axis
+## 10. M298 / TCP incompatibility — automatic Mode B fallback for multi-axis
 
 - **Where:** `setSmoothing()` function, `smoothing` state object, and `initializeSmoothing()` (`grep 'usedModeB'`)
 - **What:** On the D00 control, M298 and G43.4/G43.5 TCP are mutually exclusive. Issuing M298 while TCP is active triggers `<<TCP under control>>`. Issuing G43.4 while M298 is selected triggers `<<TCP control command not possible>>`. Per the programming manual (Ch. 13 / 14.2), Mode B (M280-M287) is the only smoothing mode valid during TCP.
@@ -130,7 +123,7 @@ Update this revision number after verifying customizations against a new version
   M298 L6      (back to M298 for next 3-axis section)
   ```
 
-## 12. Prune wrong-machine properties and legacy Mode A
+## 11. Prune wrong-machine properties and legacy Mode A
 
 - **Where:** Property definitions at the top of the file and the smoothing mode switches (`grep 'hasAAxis\|useTrunnion\|case "A"'`)
 - **What:** Removed three properties / code paths that are invalid for the U500XD2-5AX + CNC-D00v combination:

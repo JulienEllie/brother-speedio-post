@@ -184,7 +184,7 @@ properties = {
     description: "Specifies whether clamp codes for rotary axes should be output. For simultaneous toolpaths rotary axes will always get unclamped.",
     group      : "multiAxis",
     type       : "boolean",
-    value      : true,
+    value      : false,
     scope      : "post"
   },
   smoothingMode: {
