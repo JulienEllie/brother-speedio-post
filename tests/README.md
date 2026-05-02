@@ -18,8 +18,28 @@ The two comparisons that matter:
 
 ## Setup
 
-1. Copy `post.env.example` to `post.env` and set `MACHINE_FILE` to your `.mch`. `POST_BIN` is auto-detected on macOS but can be overridden.
-2. Fixtures are under `tests/fixtures/` (committed — see attribution below).
+`tests/post.env` holds machine-local paths and is gitignored. Copy the template and edit it once:
+
+```bash
+cp tests/post.env.example tests/post.env
+```
+
+Then set `MACHINE_FILE` to the absolute path of your `.mch` machine config. The 4/5-axis fixtures need a machine configuration — without it the post fails with `requires a machine configuration for N-axis toolpath`.
+
+To find the `.mch` path on macOS:
+
+```bash
+find "$HOME/Library/Application Support/Autodesk/Autodesk Fusion 360" \
+     -name '*.mch' -path '*CAMMachines*'
+```
+
+Pick the entry matching your machine (for the U500XD2-5AX, the filename starts with `_brother u500Xd2.`) and paste it as the `MACHINE_FILE` value, wrapped in double quotes so the spaces survive. Example:
+
+```bash
+MACHINE_FILE="$HOME/Library/Application Support/Autodesk/Autodesk Fusion 360/<userhash>/W.login/M2/<orghash>/CAMMachines/_brother u500Xd2.<uuid>.mch"
+```
+
+`POST_BIN` is auto-detected on macOS from the Fusion install — leave it commented unless auto-detect fails or you want to pin a specific build. Fixtures live under `tests/fixtures/` (committed — see attribution below).
 
 ## Typical workflow — after an upstream bump
 
