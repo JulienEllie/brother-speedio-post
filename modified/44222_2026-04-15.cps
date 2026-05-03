@@ -196,7 +196,8 @@ properties = {
       {title:"B", id:"B"},
       {title:"M298", id:"M298"}
     ],
-    value: "M298"
+    value: "M298",
+    scope: "post"
   },
   useSmoothing: {
     title      : "High accuracy level",
@@ -213,7 +214,8 @@ properties = {
       {title:"Finishing", id:"4"}, // 1
       {title:"Finishing high", id:"5"} // 2
     ],
-    value: "9999"
+    value: "9999",
+    scope: "post"
   },
   useMachiningLoadMonitor: {
     title      : "Machining Load Monitor",
@@ -224,7 +226,7 @@ properties = {
       {title:"Off", id:"-1"},
       {title:"M341 ON", id:"341"},
       {title:"M342 ON-MAX ONLY", id:"342"},
-      {title:"M343 ON-MIN ONLY", id:"343"},
+      {title:"M343 ON-MIN ONLY", id:"343"}
     ],
     value: "-1",
     scope: "post"
@@ -260,6 +262,14 @@ properties = {
   singleResultsFile: {
     title      : "Create single results file",
     description: "Set to false if you want to store the measurement results for each probe / inspection toolpath in a separate file",
+    group      : "probing",
+    type       : "boolean",
+    value      : true,
+    scope      : "post"
+  },
+  commissioningMode: {
+    title      : "Commissioning mode",
+    description: "Inserts M0 stop after each inspection operation so the operator can verify measurements before proceeding. Disable for production runs.",
     group      : "probing",
     type       : "boolean",
     value      : true,
@@ -554,17 +564,16 @@ function setSmoothing(mode) {
         }
         // M298 is incompatible with G43.4/G43.5 TCP — use Mode B (M280-M287) instead.
         // Map M298 level to the equivalent Mode B level by smoothing category.
-        var modeBLevel = smoothing.level;
-        if (smoothing.level == settings.smoothing.roughing) {
-          modeBLevel = settings.smoothing.modeBRoughing;
-        } else if (smoothing.level == settings.smoothing.semi) {
-          modeBLevel = settings.smoothing.modeBSemi;
-        } else if (smoothing.level == settings.smoothing.semifinishing) {
-          modeBLevel = settings.smoothing.modeBSemifinishing;
-        } else if (smoothing.level == settings.smoothing.finishing) {
-          modeBLevel = settings.smoothing.modeBFinishing;
-        } else {
-          warning(subst("Smoothing level '%1' has no explicit Mode B mapping — using raw level as Mode B offset.", smoothing.level));
+        var modeBLevelMap = {
+          [settings.smoothing.roughing]: settings.smoothing.modeBRoughing,
+          [settings.smoothing.semi]: settings.smoothing.modeBSemi,
+          [settings.smoothing.semifinishing]: settings.smoothing.modeBSemifinishing,
+          [settings.smoothing.finishing]: settings.smoothing.modeBFinishing
+        };
+        var modeBLevel = modeBLevelMap[smoothing.level];
+        if (modeBLevel === undefined) {
+          warning(subst("Smoothing level '%1' has no explicit Mode B mapping — using raw level.", smoothing.level));
+          modeBLevel = smoothing.level;
         }
         writeBlock(mFormat.format(280 + modeBLevel));
         smoothing.usedModeB = true;
