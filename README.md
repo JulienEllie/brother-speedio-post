@@ -61,6 +61,8 @@ Note: manual override uses raw level numbers (0-5), which differ from the automa
 - `upstream/<rev>_<date>.cps` — committed vanilla snapshots from Autodesk (one per pulled version)
 - `modified/<rev>_<date>.cps` — our customized versions (one per upstream bump)
 - `tests/` — regression testing harness (see [tests/README.md](tests/README.md))
+- [CUSTOMIZATIONS.md](CUSTOMIZATIONS.md) — every change we make to upstream, with rationale
+- [UPSTREAM_CHANGELOG.md](UPSTREAM_CHANGELOG.md) — what changed in each upstream bump and how it affected the merge
 
 Fusion should be pointed at the most recent `modified/<latest>.cps` as its post processor.
 
@@ -70,7 +72,7 @@ Fusion should be pointed at the most recent `modified/<latest>.cps` as its post 
 bash update.sh
 ```
 
-This downloads the latest post from the [Autodesk post library](https://cam.autodesk.com/hsmposts), parses its `$Revision` / `$Date`, and saves it as `upstream/<rev>_<date>.cps`. It also seeds `modified/<rev>_<date>.cps` by copying the previous modified version, giving you a starting point for re-applying our changes. Review [CUSTOMIZATIONS.md](CUSTOMIZATIONS.md), merge upstream's changes into the new modified file, then run `tests/regression.sh` to verify.
+This downloads the latest post from the [Autodesk post library](https://cam.autodesk.com/hsmposts), parses its `$Revision` / `$Date`, and saves it as `upstream/<rev>_<date>.cps`. It also seeds `modified/<rev>_<date>.cps` by copying the previous modified version, giving you a starting point for re-applying our changes. Review [CUSTOMIZATIONS.md](CUSTOMIZATIONS.md), merge upstream's changes into the new modified file, then run `tests/regression.sh` to verify. Record the upstream delta and its merge impact in [UPSTREAM_CHANGELOG.md](UPSTREAM_CHANGELOG.md).
 
 ## Disclaimer
 
