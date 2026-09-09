@@ -14,6 +14,76 @@ explicitly with how it was resolved. "Regression" reports the G-code diff of our
 
 ---
 
+## 44241 — 2026-09-02 (from 44229)
+
+### What changed upstream
+
+One line in `onCommand(COMMAND_LOAD_TOOL)`, immediately after the G100 tool block:
+
+```
+- currentWorkPlaneABC = abc ? abc : currentWorkPlaneABC; // workplane is set with the G100 command
++ currentWorkPlaneABC = defineWorkPlane(currentSection, false); // workplane is set with the G100 command
+```
+
+The local `abc` is `undefined` whenever `settings.workPlaneMethod.useTiltedWorkplane`
+is on (G68.2 mode): the G100 block then carries no A/B/C words and the TWP is
+established by `defineWorkPlane(currentSection, true)` *before* the tool call. With
+the old expression the tracked workplane was left untouched in that mode.
+
+### Why (likely rationale)
+
+`writeToolCall()` calls `forceWorkPlane()` (→ `currentWorkPlaneABC = undefined`) on
+every non-first tool change, after `onSection` has already set the TWP. In non-G68
+mode the old line repaired that immediately (`abc` is a real vector). In G68 mode it
+did not, so the tracked workplane stayed `undefined` after each G100. The next
+same-tool section's `setWorkPlane()` then saw "workplane unknown" and emitted a full
+re-index — Z retract, G49, `G00 A0. C0.`, G43 re-apply — and `onClose()`'s
+`setWorkPlane(0,0,0)` emitted a redundant `G00 A0. C0.` before M30. Deriving the
+value from the section instead of the local fixes the G68 path.
+
+### Merge impact
+
+- Ported clean — one line plus the header. None of our customizations touch the
+  workplane code.
+- **Regression (modified 44229 → 44241):** 4 fixtures changed, all by *removing*
+  output, and only because we run with `useG68 = true` (upstream's own output, G68
+  off, is byte-identical across the bump):
+  - `Milling/2D/full program.nc`: the same-tool section after the T02 tool change
+    lost its spurious `G28 G91 Z0 / G90 / G49 / G00 A0. C0.` retract and the
+    `G43 … H02` re-apply. It now matches upstream's structure for that section.
+  - `Milling/2D/toolchange.nc`, `Milling/2D/optional stop.nc`,
+    `Probing/Geometry/update tool wear.nc`: the trailing `G00 A0. C0.` between
+    `G53 G00 X0 Y0` and `M30` is gone.
+  - The other 41 fixtures are byte-identical (single-tool programs never reach the
+    `forceWorkPlane()` in `writeToolCall`). All 45 fixtures post with 0 failures.
+
+---
+
+## 44229 — 2026-06-12 (from 44227)
+
+### What changed upstream
+
+Simulation-only: `machineSimulation()` gained a `rotaryMode` parameter
+(`SHORTEST` | `PROGRAMMED`). When given, and `revision >= 50338`, the simulation's
+rotary direction is switched via `simulation.setRotaryToGoShortestDirection()` /
+`setRotaryToGoProgrammedDirection()` around the move and restored afterwards.
+Unknown values raise an error. No G-code path was touched.
+
+### Why (likely rationale)
+
+Lets the backplot / machine simulation honor the rotary direction the post actually
+commanded for a given move (e.g. a forced long-way unwind) instead of always
+assuming the shortest path.
+
+### Merge impact
+
+- Ported clean. Not logged at the time; this entry was backfilled with the 44241
+  bump.
+- **Regression (modified 44227 → 44229):** byte-identical across all 45 fixtures,
+  as expected for a simulation-only change.
+
+---
+
 ## 44227 — 2026-05-26 (from 44222)
 
 ### What changed upstream

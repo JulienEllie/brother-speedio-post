@@ -2,7 +2,7 @@
 
 Machine: **U500XD2-5AX** (CNC-D00v control, 16K RPM, CTS, 28-tool, Renishaw probe)
 
-Last verified against upstream revision: **44227** (2026-05-26)
+Last verified against upstream revision: **44241** (2026-09-02)
 
 These changes should be re-applied each time `update.sh` pulls a new upstream version.
 Update this revision number after verifying customizations against a new version.
